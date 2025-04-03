@@ -1,0 +1,7 @@
+%C - USB options
+
+  -s {path}      Path to HID server (default /dev/io-hid) 
+  -v vendor_id   ID of the device vendor
+  -d device_id   ID of the device
+  -V             Increase verbosity
+
