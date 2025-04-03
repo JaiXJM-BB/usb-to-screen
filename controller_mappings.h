@@ -6,6 +6,8 @@
 #define PARSER_MODE_ANALOG2x 3
 #define PARSER_MODE_ANALOG2y 4
 
+int check_allowed(int vid, int pid);
+
 uint32_t (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data);
 
 /* Generic */

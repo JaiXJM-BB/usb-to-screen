@@ -22,6 +22,7 @@ combined_device_info_t* list;
  * Initializes the relevant screen objects
  */
 int init_screen(){
+	list = NULL;
 	//Context
 	if(screen_create_context(&context, SCREEN_INPUT_PROVIDER_CONTEXT)){
 		return -1;
@@ -45,7 +46,7 @@ void close_screen(){
 
 int init_usbd(int argc, char* argv[]){
 	idents.vendor 	= 0x046d;
-	idents.device 	= 0xc21d;
+	idents.device 	= USBD_CONNECT_WILDCARD;
 	idents.dclass 	= USBD_CONNECT_WILDCARD;
 	idents.subclass = USBD_CONNECT_WILDCARD;
 	idents.protocol = USBD_CONNECT_WILDCARD;
@@ -89,6 +90,8 @@ void update_display(){
 
 //###################################
 void on_usbd_insert(struct usbd_connection* conn, usbd_device_instance_t *inst){
+	if(check_allowed(inst->ident.vendor, inst->ident.device) == -1) return;
+
 	printf( "--- Insertion ---\n" );
 	printf( " Path: %02x\n", inst->path );
 	printf( " Devno: %02x\n", inst->devno );
@@ -106,49 +109,101 @@ void on_usbd_insert(struct usbd_connection* conn, usbd_device_instance_t *inst){
 	struct usbd_pipe* pipe;
 	struct usbd_device* device;
 	struct usbd_descriptors_t* desc;
-	struct usbd_desc_node* node;
+	struct usbd_desc_node* node, *junk;
 	void* data;
 
 	usbd_attach(conn, inst, 0, &device);
 
-	desc = usbd_parse_descriptors(device, NULL, USB_DESC_DEVICE, 0, &node);
-	if(!desc){ printf("Device fail \n"); return;}
-	desc = usbd_parse_descriptors(device, node, USB_DESC_CONFIGURATION, 0, &node);
-	if(!desc){ printf("conf fail \n"); return;}
-	desc = usbd_parse_descriptors(device, node, USB_DESC_INTERFACE, 0, &node);
-	if(!desc){ printf("interface fail \n"); return;}
-	desc = usbd_parse_descriptors(device, node, USB_DESC_ENDPOINT, 1, &node);
-	if(!desc){ printf("endpoint fail \n"); return;}
+	usbd_device_descriptor_t* device_desc = usbd_device_descriptor(device, &node);
+	printf("# Confs: %u \n", device_desc->bNumConfigurations);
+	for(int confno = 1; confno <= device_desc->bNumConfigurations; confno++){
+		usbd_configuration_descriptor_t* conf_desc = 
+			usbd_configuration_descriptor(device, confno, &node);
+		printf("# Conf %u Intfs: %u\n", confno, conf_desc->bNumInterfaces);
+		for(int intfno = 0; intfno < conf_desc->bNumInterfaces; intfno++){
+			usbd_interface_descriptor_t* intf_conf = 
+				usbd_interface_descriptor(device, confno, intfno, 0, &node);
 
-	urb = usbd_alloc_urb(NULL);
-	data = usbd_alloc(32);
+			printf("# Conf %u Intf %u Endps: %u\n", confno, intfno, conf_desc->bNumInterfaces);
+			for(int endno = 0; endno <= intf_conf->bNumEndpoints; endno++){
+				if(endno % 2 == 0) continue; //only odd(input) endpoints
+				printf("Attempting Endp %u :", endno);
+				desc = usbd_parse_descriptors(device, node, USB_DESC_ENDPOINT, endno, &junk);
+				if(desc){
+					struct usbd_urb* urb;
+					struct usbd_pipe* pipe;
+					int len = ((usbd_endpoint_descriptor_t*) desc)->wMaxPacketSize;
+					int type = ((usbd_endpoint_descriptor_t*) desc)->bmAttributes;
+					
+					printf("valid desc | ");
+					urb = usbd_alloc_urb(NULL);
+					data = usbd_alloc(len);
 
-	usbd_setup_bulk(urb, URB_DIR_IN, data, 32); //guaranteed success
+					usbd_setup_bulk(urb, URB_DIR_IN, data, len);
+					if(usbd_open_pipe(device, desc, &pipe)){
+						usbd_free(data);
+						usbd_free_urb(urb);
+						continue;
+					}
+					printf("usbd pass setup | ");
+					combined_device_info_t* comb_data = calloc(1, sizeof(combined_device_info_t));
+					comb_data->data = data;
+					comb_data->data_len_expect = 32;
+					comb_data->inst = inst;
+					comb_data->attached = device;
+					comb_data->urb = urb;
+					comb_data->pipe = pipe;
+					comb_data->next = NULL;
+					screen_create_device_type(&(comb_data->device), context, SCREEN_EVENT_GAMEPAD);
 
-	if(usbd_open_pipe(device, desc, &pipe)){printf("Pipe open failure\n"); return;}
-
-	combined_device_info_t* comb_data = calloc(1, sizeof(combined_device_info_t));
-	comb_data->data = data;
-	comb_data->data_len_expect = 32;
-	comb_data->inst = inst;
-	screen_create_device_type(&(comb_data->device), context, SCREEN_EVENT_GAMEPAD);
-
-	usbd_io(urb, pipe, on_urb_receive, comb_data, USBD_TIME_DEFAULT); //if EOK process data
-}
+					if(list){
+						combined_device_info_t* list_end = list;
+						while(list_end->next) 
+							list_end = list_end->next; 
+						list_end->next = comb_data;
+					}else{
+						list = comb_data;
+					}
+					printf("setting io | ");
+					usbd_io(urb, pipe, on_urb_receive, comb_data, USBD_TIME_DEFAULT); 
+				}//Check
+				printf("\n");
+			}//Endpoint
+		}//Interface
+	}//Config
+}//Function
 
 void on_usbd_remove(struct usbd_connection* conn, usbd_device_instance_t *inst){
-	printf( "--- Removal ---\n" );
-	printf( " Path: %02x\n", inst->path );
-	printf( " Devno: %02x\n", inst->devno );
-	printf( " Generation: %04x\n", inst->generation );
-	printf( " Vendor: %08x\n", inst->ident.vendor );
-	printf( " Device: %08x\n", inst->ident.device );
-	printf( " Class: %08x\n", inst->ident.dclass );
-	printf( " Subclass: %08x\n", inst->ident.subclass );
-	printf( " Protocol: %08x\n", inst->ident.protocol );
-	printf( " Config: %08x\n", inst->config );
-	printf( " Iface: %08x\n", inst->iface );
-	printf( " Alternate: %08x\n\n", inst->alternate );
+	/*combined_device_info_t *parse;
+	parse = list;
+
+	if(!list) return;
+
+	while(list->inst == inst){
+		parse = list;
+		list = list->next;
+		screen_destroy_device(parse->device);
+		usbd_close_pipe(parse->pipe);
+		usbd_free_urb(parse->urb);
+		usbd_detach(parse->attached);
+		usbd_free(usbd_mphys(parse->data));
+		free(parse);
+	}
+	parse = list;
+	while(parse->next != NULL){
+		if(parse->next->inst == inst){
+			combined_device_info_t *temp;
+			temp = parse->next;
+			parse->next = parse->next->next;
+
+			screen_destroy_device(temp->device);
+			usbd_close_pipe(temp->pipe);
+			usbd_free_urb(temp->urb);
+			usbd_detach(temp->attached);
+			usbd_free(usbd_mphys(temp->data));
+			free(temp);
+		}
+	}*/
 }
 
 void on_usbd_event (struct usbd_connection* conn, usbd_device_instance_t *inst, uint16_t type){

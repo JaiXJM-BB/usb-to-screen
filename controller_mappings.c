@@ -1,5 +1,18 @@
 #include "controller_mappings.h"
 
+#define CONTROLLER_COUNT 2
+const int _allowed_controllers[CONTROLLER_COUNT][2] = {
+	{0x046d,0xc21d}, //F310
+	{0x046d,0xc20c} //WingMan Precision
+};
+
+int check_allowed(int vid, int pid){
+	for (int i = 0; i < CONTROLLER_COUNT; i++){
+		if(_allowed_controllers[i][0] == vid && _allowed_controllers[i][1] == pid) return 0;
+	}
+	return -1;
+}
+
 /* Parser Control */
 uint32_t (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data){
 	if(vid == 0x046d && pid == 0xc21d) return prs_v046d_pc21d;
