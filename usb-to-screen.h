@@ -20,7 +20,7 @@ typedef struct _device_info combined_device_info_t;
 
 struct _device_info{
 	usbd_device_instance_t* inst;
-	struct usbd_device* attached;
+	struct usbd_device** attached;
 	struct usbd_urb* urb;
 	struct usbd_pipe* pipe;
 

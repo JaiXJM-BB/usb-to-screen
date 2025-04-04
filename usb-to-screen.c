@@ -17,6 +17,9 @@ usbd_funcs_t funcs;
 /* storage of references */
 combined_device_info_t* list;
 
+/* synchronization */
+pthread_mutex_t insert_mutex;
+
 //#########################################
 /**
  * Initializes the relevant screen objects
@@ -90,72 +93,51 @@ void update_display(){
 
 //###################################
 void on_usbd_insert(struct usbd_connection* conn, usbd_device_instance_t *inst){
+	pthread_mutex_lock(&insert_mutex);
 	if(check_allowed(inst->ident.vendor, inst->ident.device) == -1) return;
 
-	printf( "--- Insertion ---\n" );
-	printf( " Path: %02x\n", inst->path );
-	printf( " Devno: %02x\n", inst->devno );
-	printf( " Generation: %04x\n", inst->generation );
-	printf( " Vendor: %08x\n", inst->ident.vendor );
-	printf( " Device: %08x\n", inst->ident.device );
-	printf( " Class: %08x\n", inst->ident.dclass );
-	printf( " Subclass: %08x\n", inst->ident.subclass );
-	printf( " Protocol: %08x\n", inst->ident.protocol );
-	printf( " Config: %08x\n", inst->config );
-	printf( " Iface: %08x\n", inst->iface );
-	printf( " Alternate: %08x\n\n", inst->alternate );
-
-	struct usbd_urb* urb;
-	struct usbd_pipe* pipe;
-	struct usbd_device* device;
-	struct usbd_descriptors_t* desc;
+	struct usbd_device* device = NULL;
 	struct usbd_desc_node* node, *junk;
-	void* data;
 
-	usbd_attach(conn, inst, 0, &device);
+	int ret = usbd_attach(conn, inst, 0, &device);
+	if(ret!=EOK){
+		printf("Error in device attach %d\n", ret); 
+		pthread_mutex_unlock(&insert_mutex); 
+		return;
+	}
 
 	usbd_device_descriptor_t* device_desc = usbd_device_descriptor(device, &node);
-	printf("# Confs: %u \n", device_desc->bNumConfigurations);
+
 	for(int confno = 1; confno <= device_desc->bNumConfigurations; confno++){
 		usbd_configuration_descriptor_t* conf_desc = 
 			usbd_configuration_descriptor(device, confno, &node);
-		printf("# Conf %u Intfs: %u\n", confno, conf_desc->bNumInterfaces);
+
 		for(int intfno = 0; intfno < conf_desc->bNumInterfaces; intfno++){
 			usbd_interface_descriptor_t* intf_conf = 
 				usbd_interface_descriptor(device, confno, intfno, 0, &node);
 
-			printf("# Conf %u Intf %u Endps: %u\n", confno, intfno, conf_desc->bNumInterfaces);
 			for(int endno = 0; endno <= intf_conf->bNumEndpoints; endno++){
 				if(endno % 2 == 0) continue; //only odd(input) endpoints
-				printf("Attempting Endp %u :", endno);
-				desc = usbd_parse_descriptors(device, node, USB_DESC_ENDPOINT, endno, &junk);
-				if(desc){
-					struct usbd_urb* urb;
-					struct usbd_pipe* pipe;
-					int len = ((usbd_endpoint_descriptor_t*) desc)->wMaxPacketSize;
-					int type = ((usbd_endpoint_descriptor_t*) desc)->bmAttributes;
-					
-					printf("valid desc | ");
-					urb = usbd_alloc_urb(NULL);
-					data = usbd_alloc(len);
 
-					usbd_setup_bulk(urb, URB_DIR_IN, data, len);
-					if(usbd_open_pipe(device, desc, &pipe)){
-						usbd_free(data);
-						usbd_free_urb(urb);
-						continue;
-					}
-					printf("usbd pass setup | ");
+				struct usbd_descriptors_t* desc = usbd_parse_descriptors(device, node, USB_DESC_ENDPOINT, endno, &junk);
+				if(desc){
 					combined_device_info_t* comb_data = calloc(1, sizeof(combined_device_info_t));
-					comb_data->data = data;
-					comb_data->data_len_expect = 32;
 					comb_data->inst = inst;
 					comb_data->attached = device;
-					comb_data->urb = urb;
-					comb_data->pipe = pipe;
 					comb_data->next = NULL;
 					screen_create_device_type(&(comb_data->device), context, SCREEN_EVENT_GAMEPAD);
 
+					comb_data->data_len_expect = ((usbd_endpoint_descriptor_t*) desc)->wMaxPacketSize;
+					comb_data->urb = usbd_alloc_urb(NULL);
+					comb_data->data = usbd_alloc(comb_data->data_len_expect);
+
+					usbd_setup_bulk(comb_data->urb, URB_DIR_IN, comb_data->data, comb_data->data_len_expect);
+					if(usbd_open_pipe(device, desc, &(comb_data->pipe))){
+						usbd_free(comb_data->data);
+						usbd_free_urb(comb_data->urb);
+						continue;
+					}
+					
 					if(list){
 						combined_device_info_t* list_end = list;
 						while(list_end->next) 
@@ -164,13 +146,14 @@ void on_usbd_insert(struct usbd_connection* conn, usbd_device_instance_t *inst){
 					}else{
 						list = comb_data;
 					}
-					printf("setting io | ");
-					usbd_io(urb, pipe, on_urb_receive, comb_data, USBD_TIME_DEFAULT); 
+
+					usbd_io(comb_data->urb, comb_data->pipe, on_urb_receive, comb_data, USBD_TIME_DEFAULT); 
 				}//Check
-				printf("\n");
 			}//Endpoint
 		}//Interface
 	}//Config
+
+	pthread_mutex_unlock(&insert_mutex);
 }//Function
 
 void on_usbd_remove(struct usbd_connection* conn, usbd_device_instance_t *inst){
@@ -219,15 +202,18 @@ void fire_screen_event(combined_device_info_t* comb_dev){
 	int(*parser)(int mode, int data_len, uint8_t * data);
 	parser = get_parser(comb_dev->inst->ident.vendor, comb_dev->inst->ident.device);
 
+	uint32_t analog0[2], analog1[2];
 	uint32_t button = parser(PARSER_MODE_BUTTON, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
-	uint32_t analog1x = parser(PARSER_MODE_ANALOG1x, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
-	uint32_t analog1y = parser(PARSER_MODE_ANALOG1y, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
-	uint32_t analog2x = parser(PARSER_MODE_ANALOG2x, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
-	uint32_t analog2y = parser(PARSER_MODE_ANALOG2y, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
+	analog0[0] = parser(PARSER_MODE_ANALOG1x, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
+	analog0[1] = parser(PARSER_MODE_ANALOG1y, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
+	analog1[0] = parser(PARSER_MODE_ANALOG2x, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
+	analog1[1] = parser(PARSER_MODE_ANALOG2y, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
 
 	const int type = SCREEN_EVENT_GAMEPAD;
 	screen_set_event_property_iv(event, SCREEN_PROPERTY_TYPE, &type);
 	screen_set_event_property_iv(event, SCREEN_PROPERTY_BUTTONS, &button);
+	screen_set_event_property_iv(event, SCREEN_PROPERTY_ANALOG0, &analog0);
+	screen_set_event_property_iv(event, SCREEN_PROPERTY_ANALOG1, &analog1);
 	screen_set_event_property_pv(event, SCREEN_PROPERTY_DEVICE, &(comb_dev->device));
 	if(screen_inject_event(display, event)!=0) printf("Inject failed w errno %d\n", errno);
 }
@@ -235,12 +221,12 @@ void fire_screen_event(combined_device_info_t* comb_dev){
 void on_urb_receive(struct usbd_urb* urb, struct usbd_pipe* pipe, void* user_data){
 	uint8_t * data = (uint8_t *)(((combined_device_info_t*) user_data)->data);
 
-	printf("Receive: ");
-	for (int i = 0; i < 32; i++){
-		printf("%02x", data[i]);
-		if(i%4==3) printf(" ");
-	}
-	printf("\n");
+	// printf("Receive: ");
+	// for (int i = 0; i < 32; i++){
+	// 	printf("%02x", data[i]);
+	// 	if(i%4==3) printf(" ");
+	// }
+	// printf("\n");
 
 	fire_screen_event(((combined_device_info_t*) user_data));
 	
@@ -263,6 +249,9 @@ void usb_to_screen_signal_handler(int signo){
  * main function of usb-to-screen
  */
 int main(int argc, char* argv[]){
+	//synchronization
+	if(pthread_mutex_init(&insert_mutex, NULL)!=0) return 1;
+
 	//Initialize the system
 	if(init_screen() == -1) return 1;
 	if(init_usbd(argc, argv) == -1){
@@ -276,22 +265,10 @@ int main(int argc, char* argv[]){
 	signal (SIGTERM, usb_to_screen_signal_handler);
 	signal (SIGKILL, usb_to_screen_signal_handler);
 
-	//Processing Loop
+	//Loop until SIGTERM/SIGKILL
 	for( ; ; ) sleep(60);
 
-	//Allocate a urb block
-	
-	//Set urb for bulk input
-	//30 is arbitrary
-	
-
-	//submit urb to the USB stack for processing
-	//need a pipe somehow
-	//the urb is a pointer to shared memory
-	
-
-	//end of processing loop
-
+	//For closing reference.
 	close_screen();
 	close_usbd();
 	

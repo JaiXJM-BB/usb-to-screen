@@ -23,7 +23,7 @@ uint32_t (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data)
 
 /* Generic */
 uint32_t prs_generic(int mode, int data_len, uint8_t * data){
-
+	return 0;
 }
 
 /* Logitech */
