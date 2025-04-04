@@ -48,7 +48,7 @@ void close_screen(){
 } //close_screen
 
 int init_usbd(int argc, char* argv[]){
-	idents.vendor 	= 0x046d;
+	idents.vendor 	= USBD_CONNECT_WILDCARD;
 	idents.device 	= USBD_CONNECT_WILDCARD;
 	idents.dclass 	= USBD_CONNECT_WILDCARD;
 	idents.subclass = USBD_CONNECT_WILDCARD;
