@@ -221,12 +221,12 @@ void fire_screen_event(combined_device_info_t* comb_dev){
 void on_urb_receive(struct usbd_urb* urb, struct usbd_pipe* pipe, void* user_data){
 	uint8_t * data = (uint8_t *)(((combined_device_info_t*) user_data)->data);
 
-	// printf("Receive: ");
-	// for (int i = 0; i < 32; i++){
-	// 	printf("%02x", data[i]);
-	// 	if(i%4==3) printf(" ");
-	// }
-	// printf("\n");
+	printf("Receive: ");
+	for (int i = 0; i < ((combined_device_info_t*) user_data)->data_len_expect; i++){
+		printf("%02x", data[i]);
+		if(i%4==3) printf(" ");
+	}
+	printf("\n");
 
 	fire_screen_event(((combined_device_info_t*) user_data));
 	

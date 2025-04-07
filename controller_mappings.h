@@ -16,3 +16,5 @@ uint32_t prs_generic(int mode, int data_len, uint8_t * data);
 /* Logitech */
 // F310
 uint32_t prs_v046d_pc21d(int mode, int data_len, uint8_t * data);
+// WingMan Precision
+uint32_t prs_v046d_pc20c(int mode, int data_len, uint8_t * data);
