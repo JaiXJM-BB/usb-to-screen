@@ -9,10 +9,16 @@ screen_display_t display;
 screen_event_t event;
 
 /* usbd Global Objects */
-struct usbd_connection *conn;
-usbd_device_ident_t idents;
-usbd_connect_parm_t parms;
-usbd_funcs_t funcs;
+struct usbd_connection *usb_conn;
+usbd_device_ident_t usb_idents;
+usbd_connect_parm_t usb_parms;
+usbd_funcs_t usb_funcs;
+
+/* hidd Global Objects */
+struct hidd_connection *hid_conn;
+hidd_device_ident_t hid_idents;
+hidd_connect_parm_t hid_parms;
+hidd_funcs_t hid_funcs;
 
 /* storage of references */
 combined_device_info_t* list;
@@ -48,35 +54,66 @@ void close_screen(){
 } //close_screen
 
 int init_usbd(int argc, char* argv[]){
-	idents.vendor 	= USBD_CONNECT_WILDCARD;
-	idents.device 	= USBD_CONNECT_WILDCARD;
-	idents.dclass 	= USBD_CONNECT_WILDCARD;
-	idents.subclass = USBD_CONNECT_WILDCARD;
-	idents.protocol = USBD_CONNECT_WILDCARD;
+	usb_idents.vendor 	= USBD_CONNECT_WILDCARD;
+	usb_idents.device 	= USBD_CONNECT_WILDCARD;
+	usb_idents.dclass 	= USBD_CONNECT_WILDCARD;
+	usb_idents.subclass = USBD_CONNECT_WILDCARD;
+	usb_idents.protocol = USBD_CONNECT_WILDCARD;
 
-	funcs.nentries 	= _USBDI_NFUNCS;
-	funcs.insertion = on_usbd_insert;
-	funcs.removal 	= on_usbd_remove;
-	funcs.event 	= on_usbd_event;
+	usb_funcs.nentries 	= _USBDI_NFUNCS;
+	usb_funcs.insertion = on_usbd_insert;
+	usb_funcs.removal 	= on_usbd_remove;
+	usb_funcs.event 	= on_usbd_event;
 
-	parms.path = NULL;
-	parms.vusb = USB_VERSION;
-	parms.vusbd = USBD_VERSION;
-	parms.flags = 0;
-	parms.argc = argc;
-	parms.argv = argv;
-	parms.evtbufsz = 0;
-	parms.ident = &idents;
-	parms.funcs = &funcs;
-	parms.connect_wait = USBD_CONNECT_WAIT;
+	usb_parms.path = NULL;
+	usb_parms.vusb = USB_VERSION;
+	usb_parms.vusbd = USBD_VERSION;
+	usb_parms.flags = 0;
+	usb_parms.argc = argc;
+	usb_parms.argv = argv;
+	usb_parms.evtbufsz = 0;
+	usb_parms.ident = &usb_idents;
+	usb_parms.funcs = &usb_funcs;
+	usb_parms.connect_wait = USBD_CONNECT_WAIT;
 
-	if(EOK != (errno = usbd_connect(&parms, &conn))) return -1;
+	if(EOK != (errno = usbd_connect(&usb_parms, &usb_conn))) return -1;
 
 	return 0;
 }
 
 void close_usbd(){
-	usbd_disconnect(conn);
+	//close device connections
+	usbd_disconnect(usb_conn);
+}
+
+int init_hidd(){
+	hid_idents.product_id	= HIDD_CONNECT_WILDCARD;
+	hid_idents.vendor_id	= HIDD_CONNECT_WILDCARD;
+	hid_idents.version		= HIDD_CONNECT_WILDCARD;
+
+	hid_funcs.nentries 		= _HIDDI_NFUNCS;
+	hid_funcs.insertion		= on_hidd_insert;
+	hid_funcs.removal 		= on_hidd_remove;
+	hid_funcs.event			= on_hidd_async;
+	hid_funcs.report		= on_hidd_report;
+
+	hid_parms.path 			= NULL;
+	hid_parms.vhid 			= HID_VERSION;
+	hid_parms.vhidd 		= HIDD_VERSION;
+	hid_parms.flags			= 0;
+	hid_parms.evtbufsz		= 0;
+	hid_parms.device_ident	= &hid_idents;
+	hid_parms.funcs			= &hid_funcs;
+	hid_parms.connect_wait  = HIDD_CONNECT_WAIT;
+
+	if(EOK != (errno = hidd_connect(&hid_parms, &hid_conn))) return -1;
+	
+	return 0;
+}
+
+void close_hidd(){
+	//close reports
+	hidd_disconnect(hid_conn);
 }
 
 //###################################
@@ -92,6 +129,19 @@ void update_display(){
 }
 
 //###################################
+void on_hidd_insert(struct hidd_connection *conn, hidd_device_instance_t *inst){
+
+}
+
+void on_hidd_remove(struct hidd_connection *conn, hidd_device_instance_t *inst){
+}
+
+void on_hidd_async (struct hidd_connection *conn, hidd_device_instance_t *inst, _uint16 type){}
+
+void on_hidd_report(struct hidd_connection *conn, struct hidd_report *report, void *data, _uint32 len, _uint32 flags, void *user_data){
+
+}
+
 void on_usbd_insert(struct usbd_connection* conn, usbd_device_instance_t *inst){
 	pthread_mutex_lock(&insert_mutex);
 	if(check_allowed(inst->ident.vendor, inst->ident.device) == -1) return;
@@ -189,9 +239,7 @@ void on_usbd_remove(struct usbd_connection* conn, usbd_device_instance_t *inst){
 	}*/
 }
 
-void on_usbd_event (struct usbd_connection* conn, usbd_device_instance_t *inst, uint16_t type){
-
-}
+void on_usbd_event (struct usbd_connection* conn, usbd_device_instance_t *inst, uint16_t type){}
 
 void fire_screen_event(combined_device_info_t* comb_dev){
 	if(!comb_dev) return;
@@ -241,6 +289,7 @@ void on_urb_receive(struct usbd_urb* urb, struct usbd_pipe* pipe, void* user_dat
 void usb_to_screen_signal_handler(int signo){
 	close_screen();
 	close_usbd();
+	close_hidd();
 	_exit(0);
 }
 
@@ -271,6 +320,7 @@ int main(int argc, char* argv[]){
 	//For closing reference.
 	close_screen();
 	close_usbd();
+	close_hidd();
 	
 	return 0;
 } //main
