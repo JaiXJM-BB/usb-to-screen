@@ -1,14 +1,19 @@
 #include "controller_mappings.h"
 
+//#define VERBOSE 1
+
 #define CONTROLLER_COUNT 2
-const int _allowed_controllers[CONTROLLER_COUNT][2] = {
-	{0x046d,0xc21d}, //F310
-	{0x046d,0xc20c} //WingMan Precision
+const int _allowed_controllers[CONTROLLER_COUNT][3] = {
+	{0x046d,0xc21d, 0x10000}, //F310
+	{0x046d,0xc20c, 0x100} //WingMan Precision
 };
 
+/**
+ * Returns Joystick Size if valid, -1 if invalid
+ */
 int check_allowed(int vid, int pid){
 	for (int i = 0; i < CONTROLLER_COUNT; i++){
-		if(_allowed_controllers[i][0] == vid && _allowed_controllers[i][1] == pid) return 0;
+		if(_allowed_controllers[i][0] == vid && _allowed_controllers[i][1] == pid) return _allowed_controllers[i][2];
 	}
 	return -1;
 }
@@ -32,10 +37,14 @@ uint32_t prs_generic(int mode, int data_len, uint8_t * data){
 // F310
 uint32_t prs_v046d_pc21d(int mode, int data_len, uint8_t * data){
 	if(data_len < 14) return 0;
+	int to_return = 0;
 
 	switch(mode){
 		case PARSER_MODE_BUTTON:
 			uint32_t button = 0;
+#ifdef VERBOSE
+			printf("buttons q:");
+#endif
 			button |= (SCREEN_A_GAME_BUTTON  * ((data[3]&0x10)?1:0))
 					| (SCREEN_B_GAME_BUTTON  * ((data[3]&0x20)?1:0))
 					| (SCREEN_X_GAME_BUTTON  * ((data[3]&0x40)?1:0))
@@ -53,17 +62,37 @@ uint32_t prs_v046d_pc21d(int mode, int data_len, uint8_t * data){
 					| (SCREEN_MENU1_GAME_BUTTON * ((data[2]&0x10)?1:0))
 					| (SCREEN_MENU2_GAME_BUTTON * ((data[2]&0x20)?1:0))
 					| (SCREEN_MENU3_GAME_BUTTON * ((data[3]&0x04)?1:0));
-			return button;
+			to_return =  button;
+			break;
 		case PARSER_MODE_ANALOG1x:
-			return (data[6] << 8) | data[7];
+			#ifdef VERBOSE
+			printf("analog1x:");
+			#endif
+			to_return = (data[6] << 8) | data[7];
+			break;
 		case PARSER_MODE_ANALOG1y:
-			return (data[8] << 8) | data[9];
+			#ifdef VERBOSE
+			printf("analog1y:");
+			#endif
+			to_return = (data[8] << 8) | data[9];
+			break;
 		case PARSER_MODE_ANALOG2x:
-			return (data[10] << 8) | data[11];
+			#ifdef VERBOSE
+			printf("analog2x:");
+			#endif
+			to_return = (data[10] << 8) | data[11];
+			break;
 		case PARSER_MODE_ANALOG2y:
-			return (data[12] << 8) | data[13];
+			#ifdef VERBOSE
+			printf("analog2y:");
+			#endif
+			to_return = (data[12] << 8) | data[13];
+			break;
 	}
-	return 0;
+	#ifdef VERBOSE
+	printf(" %08x\n", to_return);
+	#endif
+	return to_return;
 }
 
 //WingMan Precision

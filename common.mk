@@ -5,7 +5,7 @@ include $(QCONFIG)
 
 CCFLAGS += -g -O0
 LDFLAGS +=  -M
-LIBS += usbdi screen
+LIBS += usbdi screen hiddi
 
 NAME = usb-to-screen
 

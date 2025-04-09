@@ -175,7 +175,14 @@ void on_usbd_insert(struct usbd_connection* conn, usbd_device_instance_t *inst){
 					comb_data->inst = inst;
 					comb_data->attached = device;
 					comb_data->next = NULL;
+					comb_data->joystick_size = check_allowed(inst->ident.vendor, inst->ident.device);
+
+					const int button_count = 19;
 					screen_create_device_type(&(comb_data->device), context, SCREEN_EVENT_GAMEPAD);
+					screen_set_device_property_iv(comb_data->device, SCREEN_PROPERTY_PRODUCT, &(inst->ident.device));
+					screen_set_device_property_iv(comb_data->device, SCREEN_PROPERTY_VENDOR, &(inst->ident.vendor));
+					screen_set_device_property_iv(comb_data->device, SCREEN_PROPERTY_BUTTON_COUNT, &button_count);
+					//SIZE, SOMEHOW??
 
 					comb_data->data_len_expect = ((usbd_endpoint_descriptor_t*) desc)->wMaxPacketSize;
 					comb_data->urb = usbd_alloc_urb(NULL);
@@ -250,12 +257,15 @@ void fire_screen_event(combined_device_info_t* comb_dev){
 	int(*parser)(int mode, int data_len, uint8_t * data);
 	parser = get_parser(comb_dev->inst->ident.vendor, comb_dev->inst->ident.device);
 
-	uint32_t analog0[2], analog1[2];
-	uint32_t button = parser(PARSER_MODE_BUTTON, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
+	uint32_t analog0[3], analog1[3], button;
+	button     = parser(PARSER_MODE_BUTTON,   comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
 	analog0[0] = parser(PARSER_MODE_ANALOG1x, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
 	analog0[1] = parser(PARSER_MODE_ANALOG1y, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
 	analog1[0] = parser(PARSER_MODE_ANALOG2x, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
 	analog1[1] = parser(PARSER_MODE_ANALOG2y, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
+
+	analog0[2] = 0;
+	analog1[2] = 0;
 
 	const int type = SCREEN_EVENT_GAMEPAD;
 	screen_set_event_property_iv(event, SCREEN_PROPERTY_TYPE, &type);
