@@ -2,6 +2,7 @@
 #include "usb-to-screen.h"
 #include "controller_mappings.h"
 
+//#define VERBOSE 1
 
 /* Screen Global Objects */
 screen_context_t context;
@@ -257,12 +258,14 @@ void fire_screen_event(combined_device_info_t* comb_dev){
 	int(*parser)(int mode, int data_len, uint8_t * data);
 	parser = get_parser(comb_dev->inst->ident.vendor, comb_dev->inst->ident.device);
 
-	uint32_t analog0[3], analog1[3], button;
+	int analog0[3], analog1[3], button;
 	button     = parser(PARSER_MODE_BUTTON,   comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
 	analog0[0] = parser(PARSER_MODE_ANALOG1x, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
 	analog0[1] = parser(PARSER_MODE_ANALOG1y, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
 	analog1[0] = parser(PARSER_MODE_ANALOG2x, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
 	analog1[1] = parser(PARSER_MODE_ANALOG2y, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
+
+	printf("A0: %d %d A1: %d %d\n", analog0[0], analog0[1], analog1[0], analog1[1]);
 
 	analog0[2] = 0;
 	analog1[2] = 0;
@@ -273,18 +276,21 @@ void fire_screen_event(combined_device_info_t* comb_dev){
 	screen_set_event_property_iv(event, SCREEN_PROPERTY_ANALOG0, &analog0);
 	screen_set_event_property_iv(event, SCREEN_PROPERTY_ANALOG1, &analog1);
 	screen_set_event_property_pv(event, SCREEN_PROPERTY_DEVICE, &(comb_dev->device));
+	screen_set_event_property_iv(event, SCREEN_PROPERTY_SIZE, &(comb_dev->joystick_size));
 	if(screen_inject_event(display, event)!=0) printf("Inject failed w errno %d\n", errno);
 }
 
 void on_urb_receive(struct usbd_urb* urb, struct usbd_pipe* pipe, void* user_data){
 	uint8_t * data = (uint8_t *)(((combined_device_info_t*) user_data)->data);
 
+	#ifdef VERBOSE
 	printf("Receive: ");
 	for (int i = 0; i < ((combined_device_info_t*) user_data)->data_len_expect; i++){
 		printf("%02x", data[i]);
 		if(i%4==3) printf(" ");
 	}
 	printf("\n");
+	#endif
 
 	fire_screen_event(((combined_device_info_t*) user_data));
 	

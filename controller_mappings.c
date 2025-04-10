@@ -19,7 +19,7 @@ int check_allowed(int vid, int pid){
 }
 
 /* Parser Control */
-uint32_t (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data){
+int (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data){
 	if(vid == 0x046d && pid == 0xc21d) return prs_v046d_pc21d;
 	if(vid == 0x046d && pid == 0xc20c) return prs_v046d_pc20c;
 	return prs_generic;
@@ -28,14 +28,14 @@ uint32_t (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data)
 //#####################################################################
 
 /* Generic */
-uint32_t prs_generic(int mode, int data_len, uint8_t * data){
+int prs_generic(int mode, int data_len, uint8_t * data){
 	printf("Generic Parser Call; Device not Supported.\n");
 	return 0;
 }
 
 /* Logitech */
 // F310
-uint32_t prs_v046d_pc21d(int mode, int data_len, uint8_t * data){
+int prs_v046d_pc21d(int mode, int data_len, uint8_t * data){
 	if(data_len < 14) return 0;
 	int to_return = 0;
 
@@ -68,25 +68,25 @@ uint32_t prs_v046d_pc21d(int mode, int data_len, uint8_t * data){
 			#ifdef VERBOSE
 			printf("analog1x:");
 			#endif
-			to_return = (data[6] << 8) | data[7];
+			to_return = (data[6] *0x100) + data[7]  - 32768;
 			break;
 		case PARSER_MODE_ANALOG1y:
 			#ifdef VERBOSE
 			printf("analog1y:");
 			#endif
-			to_return = (data[8] << 8) | data[9];
+			to_return = (data[8] *0x100) + data[9]  - 32768;
 			break;
 		case PARSER_MODE_ANALOG2x:
 			#ifdef VERBOSE
 			printf("analog2x:");
 			#endif
-			to_return = (data[10] << 8) | data[11];
+			to_return = (data[10] *0x100) + data[11]  - 32768;
 			break;
 		case PARSER_MODE_ANALOG2y:
 			#ifdef VERBOSE
 			printf("analog2y:");
 			#endif
-			to_return = (data[12] << 8) | data[13];
+			to_return = (data[12] *0x100) + data[13]  - 32768;
 			break;
 	}
 	#ifdef VERBOSE
@@ -96,7 +96,7 @@ uint32_t prs_v046d_pc21d(int mode, int data_len, uint8_t * data){
 }
 
 //WingMan Precision
-uint32_t prs_v046d_pc20c(int mode, int data_len, uint8_t * data){
+int prs_v046d_pc20c(int mode, int data_len, uint8_t * data){
 	if(data_len < 3) return 0;
 
 	switch(mode){

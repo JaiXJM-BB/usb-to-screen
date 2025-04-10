@@ -8,13 +8,13 @@
 
 int check_allowed(int vid, int pid);
 
-uint32_t (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data);
+int (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data);
 
 /* Generic */
-uint32_t prs_generic(int mode, int data_len, uint8_t * data);
+int prs_generic(int mode, int data_len, uint8_t * data);
 
 /* Logitech */
 // F310
-uint32_t prs_v046d_pc21d(int mode, int data_len, uint8_t * data);
+int prs_v046d_pc21d(int mode, int data_len, uint8_t * data);
 // WingMan Precision
-uint32_t prs_v046d_pc20c(int mode, int data_len, uint8_t * data);
+int prs_v046d_pc20c(int mode, int data_len, uint8_t * data);
