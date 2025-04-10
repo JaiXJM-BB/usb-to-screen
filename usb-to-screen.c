@@ -265,7 +265,9 @@ void fire_screen_event(combined_device_info_t* comb_dev){
 	analog1[0] = parser(PARSER_MODE_ANALOG2x, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
 	analog1[1] = parser(PARSER_MODE_ANALOG2y, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
 
+	#ifdef VERBOSE
 	printf("A0: %d %d A1: %d %d\n", analog0[0], analog0[1], analog1[0], analog1[1]);
+	#endif
 
 	analog0[2] = 0;
 	analog1[2] = 0;
