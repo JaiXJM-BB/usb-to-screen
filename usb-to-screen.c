@@ -1,8 +1,7 @@
 #include <stdlib.h>
 #include "usb-to-screen.h"
 #include "parser.h"
-
-//#define VERBOSE 1
+int verbose = 0;
 
 /* Screen Global Objects */
 screen_context_t context;
@@ -21,9 +20,6 @@ hidd_device_ident_t hid_idents;
 hidd_connect_parm_t hid_parms;
 hidd_funcs_t hid_funcs;
 
-/* storage of references */
-combined_device_info_t* list;
-
 /* synchronization */
 pthread_mutex_t insert_mutex;
 
@@ -32,7 +28,6 @@ pthread_mutex_t insert_mutex;
  * Initializes the relevant screen objects
  */
 int init_screen(){
-	list = NULL;
 	//Context
 	if(screen_create_context(&context, SCREEN_INPUT_PROVIDER_CONTEXT)){
 		return -1;
@@ -83,7 +78,6 @@ int init_usbd(int argc, char* argv[]){
 }
 
 void close_usbd(){
-	//close device connections
 	usbd_disconnect(usb_conn);
 }
 
@@ -113,7 +107,6 @@ int init_hidd(){
 }
 
 void close_hidd(){
-	//close reports
 	hidd_disconnect(hid_conn);
 }
 
@@ -145,7 +138,14 @@ void on_hidd_report(struct hidd_connection *conn, struct hidd_report *report, vo
 
 void on_usbd_insert(struct usbd_connection* conn, usbd_device_instance_t *inst){
 	pthread_mutex_lock(&insert_mutex);
-	if(check_allowed(inst->ident.vendor, inst->ident.device) == -1) return;
+
+	if(verbose) 
+		printf("Attempting to attach to %08d %08d via USB... \n", inst->ident.vendor, inst->ident.device);
+
+	if(check_allowed(inst->ident.vendor, inst->ident.device) == -1){ 
+		if(verbose) printf("Attach failure: not supported.\n");
+		return;
+	}
 
 	struct usbd_device* device = NULL;
 	struct usbd_desc_node* node, *junk;
@@ -173,7 +173,9 @@ void on_usbd_insert(struct usbd_connection* conn, usbd_device_instance_t *inst){
 				struct usbd_descriptors_t* desc = usbd_parse_descriptors(device, node, USB_DESC_ENDPOINT, endno, &junk);
 				if(desc){
 					combined_device_info_t* comb_data = calloc(1, sizeof(combined_device_info_t));
-					comb_data->inst = inst;
+					comb_data->vid = inst->ident.vendor;
+					comb_data->pid = inst->ident.device;
+					if(verbose) printf("Setting up combined data for %08x %08x\n", comb_data->vid, comb_data->pid);
 					comb_data->attached = device;
 					comb_data->next = NULL;
 					comb_data->joystick_size = check_allowed(inst->ident.vendor, inst->ident.device);
@@ -188,63 +190,34 @@ void on_usbd_insert(struct usbd_connection* conn, usbd_device_instance_t *inst){
 					comb_data->data_len_expect = ((usbd_endpoint_descriptor_t*) desc)->wMaxPacketSize;
 					comb_data->urb = usbd_alloc_urb(NULL);
 					comb_data->data = usbd_alloc(comb_data->data_len_expect);
-
+					
 					usbd_setup_bulk(comb_data->urb, URB_DIR_IN, comb_data->data, comb_data->data_len_expect);
 					if(usbd_open_pipe(device, desc, &(comb_data->pipe))){
 						usbd_free(comb_data->data);
 						usbd_free_urb(comb_data->urb);
 						continue;
 					}
-					
-					if(list){
-						combined_device_info_t* list_end = list;
-						while(list_end->next) 
-							list_end = list_end->next; 
-						list_end->next = comb_data;
-					}else{
-						list = comb_data;
-					}
 
+					if(verbose) printf("Seting up io callback... \n");
 					usbd_io(comb_data->urb, comb_data->pipe, on_urb_receive, comb_data, USBD_TIME_DEFAULT); 
 				}//Check
 			}//Endpoint
 		}//Interface
 	}//Config
-
+	printf("Attach Success.\n");
 	pthread_mutex_unlock(&insert_mutex);
 }//Function
 
 void on_usbd_remove(struct usbd_connection* conn, usbd_device_instance_t *inst){
-	/*combined_device_info_t *parse;
-	parse = list;
+	struct usbd_device * device;
+    device = usbd_device_lookup(conn, inst);
+	if(verbose) printf("Attempting to remove %d %d on USB... \n", inst->ident.vendor, inst->ident.device);
 
-	if(!list) return;
-
-	while(list->inst == inst){
-		parse = list;
-		list = list->next;
-		screen_destroy_device(parse->device);
-		usbd_close_pipe(parse->pipe);
-		usbd_free_urb(parse->urb);
-		usbd_detach(parse->attached);
-		usbd_free(usbd_mphys(parse->data));
-		free(parse);
-	}
-	parse = list;
-	while(parse->next != NULL){
-		if(parse->next->inst == inst){
-			combined_device_info_t *temp;
-			temp = parse->next;
-			parse->next = parse->next->next;
-
-			screen_destroy_device(temp->device);
-			usbd_close_pipe(temp->pipe);
-			usbd_free_urb(temp->urb);
-			usbd_detach(temp->attached);
-			usbd_free(usbd_mphys(temp->data));
-			free(temp);
-		}
-	}*/
+	if(device == NULL){
+        // Handle a case where this device wasn't attached (do nothing)
+    }else{
+        usbd_detach(device);
+    }
 }
 
 void on_usbd_event (struct usbd_connection* conn, usbd_device_instance_t *inst, uint16_t type){}
@@ -253,10 +226,9 @@ void fire_screen_event(combined_device_info_t* comb_dev){
 	if(!comb_dev) return;
 	if(!comb_dev->data) return;
 	if(!comb_dev->device) return;
-	if(!comb_dev->inst) return;
 
 	int(*parser)(int mode, int data_len, uint8_t * data);
-	parser = get_parser(comb_dev->inst->ident.vendor, comb_dev->inst->ident.device);
+	parser = get_parser(comb_dev->vid, comb_dev->pid);
 
 	int analog0[3], analog1[3], button;
 	button     = parser(PARSER_MODE_BUTTON,   comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
@@ -265,9 +237,9 @@ void fire_screen_event(combined_device_info_t* comb_dev){
 	analog1[0] = parser(PARSER_MODE_ANALOG2x, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
 	analog1[1] = parser(PARSER_MODE_ANALOG2y, comb_dev->data_len_expect, (uint8_t*) comb_dev->data);
 
-	#ifdef VERBOSE
-	printf("A0: %d %d A1: %d %d\n", analog0[0], analog0[1], analog1[0], analog1[1]);
-	#endif
+	if(verbose >= 2)
+		printf("A0: %d %d A1: %d %d\n", analog0[0], analog0[1], analog1[0], analog1[1]);
+	
 
 	analog0[2] = 0;
 	analog1[2] = 0;
@@ -285,14 +257,14 @@ void fire_screen_event(combined_device_info_t* comb_dev){
 void on_urb_receive(struct usbd_urb* urb, struct usbd_pipe* pipe, void* user_data){
 	uint8_t * data = (uint8_t *)(((combined_device_info_t*) user_data)->data);
 
-	#ifdef VERBOSE
-	printf("Receive: ");
-	for (int i = 0; i < ((combined_device_info_t*) user_data)->data_len_expect; i++){
-		printf("%02x", data[i]);
-		if(i%4==3) printf(" ");
-	}
-	printf("\n");
-	#endif
+	if(verbose >= 2){
+		printf("Receive: ");
+		for (int i = 0; i < ((combined_device_info_t*) user_data)->data_len_expect; i++){
+			printf("%02x", data[i]);
+			if(i%4==3) printf(" ");
+		}
+		printf("\n");
+    }
 
 	fire_screen_event(((combined_device_info_t*) user_data));
 	
@@ -316,6 +288,11 @@ void usb_to_screen_signal_handler(int signo){
  * main function of usb-to-screen
  */
 int main(int argc, char* argv[]){
+	//Process options (Verbosity)
+	int opt;
+	while((opt = getopt(argc, argv, "V")) !=- 1) verbose += (opt == 'V');
+	if(verbose > 0) printf("Verbosity Enabled: Level %d\n", verbose);
+
 	//synchronization
 	if(pthread_mutex_init(&insert_mutex, NULL)!=0) return 1;
 

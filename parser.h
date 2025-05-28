@@ -10,7 +10,7 @@ int check_allowed(int vid, int pid);
 
 int (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data);
 
-struct _device_info{
+struct _device_lookup_storage{
 	int vid;
 	int pid;
 	int js_res;

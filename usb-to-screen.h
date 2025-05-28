@@ -30,13 +30,13 @@ void on_hidd_report(struct hidd_connection *conn, struct hidd_report *report, vo
 typedef struct _device_info combined_device_info_t;
 
 struct _device_info{
-	usbd_device_instance_t* inst;
 	struct usbd_device** attached;
 	struct usbd_urb* urb;
 	struct usbd_pipe* pipe;
 
 	screen_device_t device;
 
+	int vid, pid;
 	int data_len_expect, joystick_size;
 	void* data;
 

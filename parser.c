@@ -1,4 +1,5 @@
 #include "parser.h"
+extern int verbose;
 
 /* To Any Future Devs: 
  * You can extend the list of supported controllers below by incrementing CONTROLLER_COUNT
@@ -8,7 +9,7 @@
  * Once you add the controller here, make sure to add a parser function below. Otherwise it will default to generic.
  */
 #define CONTROLLER_COUNT 2
-const struct _device_info _device_lookup[CONTROLLER_COUNT][3] = {
+const struct _device_lookup_storage _device_lookup[CONTROLLER_COUNT][3] = {
 /*	 VID   | PID   | Joystick Res | Parser Function  */
 	{0x046d, 0xc21d, 0x10000      , prs_v046d_pc21d}, //F310
 	{0x046d, 0xc20c, 0x100        , prs_v046d_pc20c}  //WingMan Precision
@@ -17,10 +18,14 @@ const struct _device_info _device_lookup[CONTROLLER_COUNT][3] = {
 
 /* Parser Control */
 int (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data){
+	if(verbose) printf("Getting parser for %08d %08d.\n", vid, pid);
 	for(int i = 0; i< CONTROLLER_COUNT; i++){
-		if(_device_lookup[i]->vid == vid && _device_lookup[i]->pid == pid)
+		if(_device_lookup[i]->vid == vid && _device_lookup[i]->pid == pid){
+			if(verbose) printf("Specialized Parser Found.\n");
 			return _device_lookup[i]->parser;
+		}
 	}
+	if(verbose) printf("Generic Parser Found.\n");
 	return prs_generic;
 }
 
@@ -51,7 +56,7 @@ int check_allowed(int vid, int pid){
 
 /* Generic */
 int prs_generic(int mode, int data_len, uint8_t * data){
-	printf("Generic Parser Call; Device not Supported.\n");
+	if(verbose >=3) printf("Generic Parser Call; Device not Supported.\n");
 	return 0;
 }
 
@@ -64,9 +69,9 @@ int prs_v046d_pc21d(int mode, int data_len, uint8_t * data){
 	switch(mode){
 		case PARSER_MODE_BUTTON:
 			uint32_t button = 0;
-#ifdef VERBOSE
-			printf("buttons q:");
-#endif
+			if(verbose >= 3)
+				printf("buttons q:");
+
 			button |= (SCREEN_A_GAME_BUTTON  * ((data[3]&0x10)?1:0))
 					| (SCREEN_B_GAME_BUTTON  * ((data[3]&0x20)?1:0))
 					| (SCREEN_X_GAME_BUTTON  * ((data[3]&0x40)?1:0))
@@ -87,33 +92,28 @@ int prs_v046d_pc21d(int mode, int data_len, uint8_t * data){
 			to_return =  button;
 			break;
 		case PARSER_MODE_ANALOG1x:
-			#ifdef VERBOSE
-			printf("analog1x:");
-			#endif
+			if(verbose >= 3)
+				printf("analog1x:");
 			to_return = (data[6] *0x100) + data[7]  - 32768;
 			break;
 		case PARSER_MODE_ANALOG1y:
-			#ifdef VERBOSE
-			printf("analog1y:");
-			#endif
+			if(verbose >= 3)
+				printf("analog1y:");
 			to_return = (data[8] *0x100) + data[9]  - 32768;
 			break;
 		case PARSER_MODE_ANALOG2x:
-			#ifdef VERBOSE
-			printf("analog2x:");
-			#endif
+			if(verbose >= 3)
+				printf("analog2x:");
 			to_return = (data[10] *0x100) + data[11]  - 32768;
 			break;
 		case PARSER_MODE_ANALOG2y:
-			#ifdef VERBOSE
-			printf("analog2y:");
-			#endif
+			if(verbose >= 3)
+				printf("analog2y:");
 			to_return = (data[12] *0x100) + data[13]  - 32768;
 			break;
 	}
-	#ifdef VERBOSE
-	printf(" %08x\n", to_return);
-	#endif
+	if(verbose >= 3)
+		printf(" %08x\n", to_return);
 	return to_return;
 }
 
