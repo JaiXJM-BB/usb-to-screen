@@ -12,12 +12,14 @@ int  init_hidd	 ();
 void close_hidd	 ();
 
 /* Callbacks */
+// USB Driver
 void on_usbd_insert(struct usbd_connection* conn, usbd_device_instance_t *inst);
 void on_usbd_remove(struct usbd_connection* conn, usbd_device_instance_t *inst);
 void on_usbd_event (struct usbd_connection* conn, usbd_device_instance_t *inst, uint16_t type);
 
 void on_urb_receive(struct usbd_urb* urb, struct usbd_pipe* pipe, void* user_data);
 
+// HID Driver
 void on_hidd_insert(struct hidd_connection *conn, hidd_device_instance_t *inst);
 void on_hidd_remove(struct hidd_connection *conn, hidd_device_instance_t *inst);
 void on_hidd_async (struct hidd_connection *conn, hidd_device_instance_t *inst, _uint16 type);

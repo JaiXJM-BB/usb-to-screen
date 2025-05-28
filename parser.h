@@ -10,6 +10,13 @@ int check_allowed(int vid, int pid);
 
 int (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data);
 
+struct _device_info{
+	int vid;
+	int pid;
+	int js_res;
+	int(*parser)(int mode, int data_len, uint8_t *data);
+};
+
 /* Generic */
 int prs_generic(int mode, int data_len, uint8_t * data);
 
@@ -18,3 +25,5 @@ int prs_generic(int mode, int data_len, uint8_t * data);
 int prs_v046d_pc21d(int mode, int data_len, uint8_t * data);
 // WingMan Precision
 int prs_v046d_pc20c(int mode, int data_len, uint8_t * data);
+
+//Add your function declaration here!

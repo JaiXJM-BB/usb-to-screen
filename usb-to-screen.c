@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include "usb-to-screen.h"
-#include "controller_mappings.h"
+#include "parser.h"
 
 //#define VERBOSE 1
 

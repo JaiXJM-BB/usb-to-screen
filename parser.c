@@ -1,31 +1,53 @@
-#include "controller_mappings.h"
+#include "parser.h"
 
-//#define VERBOSE 1
-
+/* To Any Future Devs: 
+ * You can extend the list of supported controllers below by incrementing CONTROLLER_COUNT
+ * and then adding its VID, PID, the size of the Joystick range (as if it were unsigned, 
+ * eg. -1 to 2 would be 0 to 4, so 4 would be the size), and the parser reference.
+ * 
+ * Once you add the controller here, make sure to add a parser function below. Otherwise it will default to generic.
+ */
 #define CONTROLLER_COUNT 2
-const int _allowed_controllers[CONTROLLER_COUNT][3] = {
-	{0x046d,0xc21d, 0x10000}, //F310
-	{0x046d,0xc20c, 0x100} //WingMan Precision
+const struct _device_info _device_lookup[CONTROLLER_COUNT][3] = {
+/*	 VID   | PID   | Joystick Res | Parser Function  */
+	{0x046d, 0xc21d, 0x10000      , prs_v046d_pc21d}, //F310
+	{0x046d, 0xc20c, 0x100        , prs_v046d_pc20c}  //WingMan Precision
 };
+
+
+/* Parser Control */
+int (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data){
+	for(int i = 0; i< CONTROLLER_COUNT; i++){
+		if(_device_lookup[i]->vid == vid && _device_lookup[i]->pid == pid)
+			return _device_lookup[i]->parser;
+	}
+	return prs_generic;
+}
 
 /**
  * Returns Joystick Size if valid, -1 if invalid
  */
 int check_allowed(int vid, int pid){
 	for (int i = 0; i < CONTROLLER_COUNT; i++){
-		if(_allowed_controllers[i][0] == vid && _allowed_controllers[i][1] == pid) return _allowed_controllers[i][2];
+		if(_device_lookup[i]->vid == vid && _device_lookup[i]->pid == pid) return _device_lookup[i]->js_res;
 	}
 	return -1;
 }
 
-/* Parser Control */
-int (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data){
-	if(vid == 0x046d && pid == 0xc21d) return prs_v046d_pc21d;
-	if(vid == 0x046d && pid == 0xc20c) return prs_v046d_pc20c;
-	return prs_generic;
-}
-
-//#####################################################################
+//#######################################
+//########## Parsing Functions ##########
+//#######################################
+/* To Future Devs:
+ * Parser functions should be placed here.
+ * They take in an int `mode`, int `data_len`, and a uint8_t* data buffer, sized to data_len. 
+ * Return 0 if invalid.
+ * `mode` is one of the following:
+ * PARSER_MODE_BUTTON, in which it should return all button input sorted as screen game buttons
+ * PARSER_MODE_ANALOG1x,
+ * PARSER_MODE_ANALOG1y,
+ * PARSER_MODE_ANALOG2x,
+ * PARSER_MODE_ANALOG2y.
+ */
 
 /* Generic */
 int prs_generic(int mode, int data_len, uint8_t * data){

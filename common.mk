@@ -10,3 +10,9 @@ LIBS += usbdi screen hiddi
 NAME = usb-to-screen
 
 include $(MKFILES_ROOT)/qtargets.mk
+
+clean: 
+	-rm *.dep
+	-rm *.o 
+	-rm *.map
+	-rm usb-to-screen
