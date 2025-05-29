@@ -18,7 +18,7 @@ const struct _device_lookup_storage _device_lookup[CONTROLLER_COUNT][3] = {
 
 /* Parser Control */
 int (*get_parser(int vid, int pid))(int mode, int data_len, uint8_t * data){
-	if(verbose) printf("Getting parser for %08d %08d.\n", vid, pid);
+	if(verbose) printf("Getting parser for %x %x.\n", vid, pid);
 	for(int i = 0; i< CONTROLLER_COUNT; i++){
 		if(_device_lookup[i]->vid == vid && _device_lookup[i]->pid == pid){
 			if(verbose) printf("Specialized Parser Found.\n");
@@ -58,6 +58,14 @@ int check_allowed(int vid, int pid){
 int prs_generic(int mode, int data_len, uint8_t * data){
 	if(verbose >=3) printf("Generic Parser Call; Device not Supported.\n");
 	return 0;
+}
+
+/* HID Compliant - This is a special parser used only by the hid layer.
+ * DO NOT SET ANY PARSERS IN DEVICE LOOKUP TO THIS FUNCTION.
+ */
+int prs_hid(){
+	int to_return = 0;
+	return to_return;
 }
 
 /* Logitech */

@@ -128,6 +128,8 @@ void on_hidd_insert(struct hidd_connection *conn, hidd_device_instance_t *inst){
 }
 
 void on_hidd_remove(struct hidd_connection *conn, hidd_device_instance_t *inst){
+	if(verbose) printf("Attempting removal from HID\n");
+	hidd_reports_detach(conn, inst);
 }
 
 void on_hidd_async (struct hidd_connection *conn, hidd_device_instance_t *inst, _uint16 type){}
@@ -140,7 +142,7 @@ void on_usbd_insert(struct usbd_connection* conn, usbd_device_instance_t *inst){
 	pthread_mutex_lock(&insert_mutex);
 
 	if(verbose) 
-		printf("Attempting to attach to %08d %08d via USB... \n", inst->ident.vendor, inst->ident.device);
+		printf("Attempting to attach to %x %x via USB... \n", inst->ident.vendor, inst->ident.device);
 
 	if(check_allowed(inst->ident.vendor, inst->ident.device) == -1){ 
 		if(verbose) printf("Attach failure: not supported.\n");
