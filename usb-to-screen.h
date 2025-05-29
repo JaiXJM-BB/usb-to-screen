@@ -36,8 +36,7 @@ struct _device_info{
 
 	screen_device_t device;
 
-	int vid, pid;
-	int data_len_expect, joystick_size;
+	int vid, pid, data_len_expect, joystick_size;
 	void* data;
 
 	combined_device_info_t* next;
