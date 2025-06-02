@@ -44,5 +44,6 @@ struct _device_info{
 
 /* Helpers */
 void fire_screen_event(combined_device_info_t* comb_data);
+void fire_screen_event_close(combined_device_info_t* comb_data);
 // void fire_screen_event_hid();
 void update_display();

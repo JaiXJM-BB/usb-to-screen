@@ -60,11 +60,31 @@ int prs_generic(int mode, int data_len, uint8_t * data){
 	return 0;
 }
 
+/* HID Map */
+int hid_button_lookup[5] = {
+	0,
+	SCREEN_A_GAME_BUTTON,
+	SCREEN_B_GAME_BUTTON,
+	SCREEN_X_GAME_BUTTON,
+	SCREEN_Y_GAME_BUTTON
+};
+
 /* HID Compliant - This is a special parser used only by the hid layer.
  * DO NOT SET ANY PARSERS IN DEVICE LOOKUP TO THIS FUNCTION.
  */
-int prs_hid(){
+int prs_hid(uint32_t x, uint32_t y, int num_press, uint16_t *buf_press, int num_rel, uint16_t *buf_rel, int num_hld, uint16_t *buf_hld){
 	int to_return = 0;
+
+	if(x == 1)  to_return |= SCREEN_DPAD_LEFT_GAME_BUTTON; 
+	if(x == -2) to_return |= SCREEN_DPAD_RIGHT_GAME_BUTTON;
+	if(y == 1)  to_return |= SCREEN_DPAD_LEFT_GAME_BUTTON; 
+	if(y == -2) to_return |= SCREEN_DPAD_RIGHT_GAME_BUTTON;
+
+	for(int i = 0; i < num_press; i++)
+		to_return |= hid_button_lookup[buf_press[i]<5? buf_press[i]:0];
+	for(int i = 0; i < num_hld; i++)
+		to_return |= hid_button_lookup[buf_hld[i]<5? buf_hld[i]:0];
+
 	return to_return;
 }
 

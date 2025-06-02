@@ -41,7 +41,6 @@ int init_screen(){
 		return -1;
 	}
 	update_display();
-	return 0;
 } //init_screen
 
 /**
@@ -210,7 +209,7 @@ void on_usbd_insert(struct usbd_connection* conn, usbd_device_instance_t *inst){
 			}//Endpoint
 		}//Interface
 	}//Config
-	printf("Attach Success.\n");
+	if(verbose) printf("Attach Success.\n");
 	pthread_mutex_unlock(&insert_mutex);
 }//Function
 
@@ -232,14 +231,16 @@ void on_usbd_remove(struct usbd_connection* conn, usbd_device_instance_t *inst){
 
 		if(temp != NULL && temp->pid == inst->ident.device && temp->vid == inst->ident.vendor){
 			*comb_parser = temp->next;
+			fire_screen_event_close(temp);
 			if(verbose >=3 ) printf("Found data at the start of the list. Destroying Device...\n");
-			screen_destroy_device(temp);
+			screen_destroy_device(temp->device);
 			if(verbose >=3 ) printf("Freeing URB...\n");
 			usbd_free_urb(temp->urb);
 			if(verbose >=3 ) printf("Freeing data buffer...\n");
 			usbd_free(temp->data); //usbd_mphys is no longer needed in QNX 8
 			if(verbose >=3 ) printf("Freeing combined data struct...\n");
 			free(temp);
+			if(verbose >=3 ) printf("Completed.\n");
 		}else{
 			while(temp != NULL && temp->pid != inst->ident.device && temp->vid != inst->ident.vendor){
 				prev = temp;
@@ -247,14 +248,16 @@ void on_usbd_remove(struct usbd_connection* conn, usbd_device_instance_t *inst){
 			}
 
 			if(temp != NULL){
+				fire_screen_event_close(temp);
 				if(verbose >=3 ) printf("Found data mid list. Destroying Device...\n");
-				screen_destroy_device(temp);
+				screen_destroy_device(temp->device);
 				if(verbose >=3 ) printf("Freeing URB...\n");
 				usbd_free_urb(temp->urb);
 				if(verbose >=3 ) printf("Freeing data buffer...\n");
 				usbd_free(temp->data); //usbd_mphys is no longer needed in QNX 8
 				if(verbose >=3 ) printf("Freeing combined data struct...\n");
 				free(temp);
+				if(verbose >=3 ) printf("Completed.\n");
 			}
 		}
 
@@ -298,6 +301,20 @@ void fire_screen_event(combined_device_info_t* comb_dev){
 
 void fire_screen_event_hid();
 
+void fire_screen_event_close(combined_device_info_t* comb_dev){
+	if(!comb_dev) return;
+	if(!comb_dev->data) return;
+	if(!comb_dev->device) return;
+
+	const int type = SCREEN_EVENT_CLOSE;
+	const int attached = 0;
+	screen_set_event_property_iv(event, SCREEN_PROPERTY_TYPE, &type);
+	screen_set_event_property_iv(event, SCREEN_PROPERTY_ATTACHED, &attached);
+	screen_set_event_property_pv(event, SCREEN_PROPERTY_DEVICE, &(comb_dev->device));
+	screen_set_event_property_iv(event, SCREEN_PROPERTY_SIZE, &(comb_dev->joystick_size));
+	if(screen_inject_event(display, event)!=0) printf("Inject failed w errno %d\n", errno);
+}
+
 void on_urb_receive(struct usbd_urb* urb, struct usbd_pipe* pipe, void* user_data){
 	uint8_t * data = (uint8_t *)(((combined_device_info_t*) user_data)->data);
 
@@ -331,14 +348,16 @@ void usb_to_screen_signal_handler(int signo){
 		temp = next;
 		next = next->next;
 
+		fire_screen_event_close(temp);
 		if(verbose >=3 ) printf("Destroying Device...\n");
-		screen_destroy_device(temp);
+		screen_destroy_device(temp->device);
 		if(verbose >=3 ) printf("Freeing URB...\n");
 		usbd_free_urb(temp->urb);
 		if(verbose >=3 ) printf("Freeing data buffer...\n");
 		usbd_free(temp->data); //usbd_mphys is no longer needed in QNX 8
 		if(verbose >=3 ) printf("Freeing combined data struct...\n");
 		free(temp);
+		if(verbose >=3 ) printf("Completed.\n");
 	}
 	
 	/* Closing Functions */
